@@ -97,20 +97,29 @@ puro (`src/ocr/recognize.ts`), o que também permite verificá-lo no Node.
    perspectiva deixa de importar), tinta é separada com Otsu local, ruído é descartado por
    componente conexo, o glifo é normalizado para 24×24 e comparado com 72 templates (4 fontes ×
    normal/negrito) por distância + buracos fechados (0/6/9 têm 1, 8 tem 2) + proporção.
-6. **Conferência obrigatória**: cada célula volta com confiança; as duvidosas aparecem em amarelo e
+6. **Sujeira não vira número**: cada célula termina em um de três estados — dígito reconhecido,
+   vazia, ou "tinha tinta mas não é dígito". Esse último caso cobre resto de linha da grade (que
+   num recorte torto entra na célula), mancha e escrita à mão: a célula fica **vazia** e apenas
+   destacada, porque inventar número é pior do que deixar o cliente preencher. Os cortes foram
+   medidos (354 células corretas × fragmentos de linha reais): casamento com template ≤ 0,30,
+   largura ≥ 26% da célula e preenchimento do glifo ≤ 78%.
+7. **Conferência obrigatória**: cada célula volta com confiança; as duvidosas aparecem em amarelo e
    podem ser corrigidas antes de jogar. Números repetidos aparecem em vermelho e o app **não deixa
-   começar** enquanto houver conflito; tabuleiro com mais de uma solução pede confirmação.
+   começar** enquanto houver conflito; tabuleiro com mais de uma solução pede confirmação, e uma
+   contagem acima de 55 números (muito acima do normal, 22–45) avisa que pode ter entrado número a
+   mais.
 
 ### Limites (medidos, não estimados)
 
-`npm run verify:ocr` roda 11 imagens geradas com fontes que **não** estão nos templates, com giro
-(1,5° a 3,2°), perspectiva (16% de afunilamento), desfoque, grão e vinheta:
+`npm run verify:ocr` roda 12 imagens geradas com fontes que **não** estão nos templates, com giro
+(0,7° a 3,2°), perspectiva (16% de afunilamento), desfoque, grão, vinheta e manchas de papel:
 
 | Cenário | Resultado |
 |---|---|
-| 8 digitalizações/fotos dentro do envelope (inclui perspectiva e giro) | 81/81 células corretas |
+| 9 digitalizações/fotos dentro do envelope (inclui perspectiva, giro e manchas) | 81/81 células corretas, células vazias preservadas |
 | imagem sem tabuleiro | recusada (não inventa grade) |
 | 600 px com desfoque de 1,5 px / 400 px com 1,7 px | recusadas com mensagem para refazer a foto |
+| célula com resto de linha, ruído, mancha ou traço solto | não vira número (fica vazia) |
 
 Ou seja: **o tabuleiro precisa de ~50 px por célula e foco razoável**. Em foto de celular (reduzida
 para 1000 px) a célula fica com ~110 px e o desfoque efetivo é ~10× menor que o do caso recusado.
@@ -122,9 +131,10 @@ Dígitos **manuscritos** não são suportados — os templates são de fonte tip
 npm run verify:ocr
 ```
 
-Cobre três camadas: o decodificador PNG (ida e volta em todos os filtros de linha e tipos de cor),
-os 72 templates (cada glifo precisa voltar como ele mesmo, inclusive deslocado 1 px) e as fixtures
-de foto (acerto exato célula por célula, preservação das células vazias e recusa dos casos ilegíveis).
+Cobre quatro camadas: o decodificador PNG (ida e volta em todos os filtros de linha e tipos de cor),
+os 72 templates (cada glifo precisa voltar como ele mesmo, inclusive deslocado 1 px), **células sem
+dígito** (resto de linha, ruído, mancha e traço curto não podem virar número) e as fixtures de foto
+(acerto exato célula por célula, preservação das células vazias e recusa dos casos ilegíveis).
 
 ## Testar no celular pela rede (Tailscale)
 

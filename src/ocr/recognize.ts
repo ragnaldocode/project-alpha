@@ -76,7 +76,7 @@ export function createEmptyGrid(): number[][] {
 /* ------------------------------------------------------------------ limiar */
 
 /** Limiar de Otsu global (usado como referência e para medir contraste). */
-export function otsuThreshold(gray: Uint8Array): number {
+function otsuThreshold(gray: Uint8Array): number {
   const histogram = new Array<number>(256).fill(0);
   for (let i = 0; i < gray.length; i += 1) histogram[gray[i]] += 1;
 
@@ -1059,35 +1059,55 @@ function sampleQuad(
 /* --------------------------------------------------------- reconhecimento */
 
 /** Resultado da leitura de uma única célula. */
-export interface CellReading {
-  digit: number;
-  /** 0..1 — quão seguro o leitor está deste dígito. */
-  confidence: number;
-}
+/**
+ * Leitura de uma célula:
+ * - `digit`: um número foi reconhecido;
+ * - `empty`: a célula está vazia;
+ * - `unreadable`: há tinta, mas ela não parece um dígito confiável (resto de
+ *   linha, mancha, número escrito à mão). A célula fica **vazia** no tabuleiro
+ *   — inventar um número aqui seria pior do que deixar o cliente preencher.
+ */
+export type CellReading =
+  | { kind: 'digit'; digit: number; confidence: number }
+  | { kind: 'empty' }
+  | { kind: 'unreadable'; confidence: number };
+
+/**
+ * Limites que separam dígito impresso de sujeira — medidos em 354 células
+ * lidas corretamente nas fixtures (fontes fora dos templates, com giro,
+ * perspectiva, desfoque, grão e vinheta) contra fragmentos de linha da grade:
+ *
+ *                dígitos reais        fragmentos/ruído
+ *   score        ≤ 0,256              ≥ 0,34
+ *   largura      ≥ 0,32 da célula     0,05 – 0,21
+ *   preenchim.   ≤ 0,64               1,0 (barra sólida)
+ */
+const MAX_MATCH_SCORE = 0.3;
+const MIN_GLYPH_WIDTH = 0.26;
+const MAX_GLYPH_FILL = 0.78;
 
 /**
  * Lê o dígito de uma célula já recortada (região quadrada em tons de cinza).
  *
- * Devolve `null` quando a célula está vazia ou o que existe ali não parece um
- * dígito (traço solto, resto de linha). Exportada para poder ser verificada
- * diretamente contra os templates, sem precisar montar um tabuleiro.
+ * Exportada para poder ser verificada diretamente contra os templates, sem
+ * precisar montar um tabuleiro.
  */
 export function classifyCell(
   region: Uint8Array,
   size: number,
   templates: Array<{ digit: number; vector: Float32Array; holes: number; aspect: number }>,
   minInk = 0.018,
-): CellReading | null {
+): CellReading {
   const w = size;
   const h = size;
 
   const { mask: cellMask, contrast } = inkMask({ gray: region, width: w, height: h });
-  if (contrast < 40) return null; // célula uniforme → vazia
+  if (contrast < 40) return { kind: 'empty' }; // célula uniforme → vazia
 
   const cleaned = dominantComponents(cellMask, w, h, 0.15);
   let inkCount = 0;
   for (let i = 0; i < cleaned.length; i += 1) inkCount += cleaned[i];
-  if (inkCount / (w * h) < minInk) return null;
+  if (inkCount / (w * h) < minInk) return { kind: 'empty' };
 
   let bx0 = w;
   let by0 = h;
@@ -1102,13 +1122,13 @@ export function classifyCell(
       if (y > by1) by1 = y;
     }
   }
-  if (bx1 < 0) return null;
+  if (bx1 < 0) return { kind: 'empty' };
 
   const glyphH = by1 - by0 + 1;
   const glyphW = bx1 - bx0 + 1;
   // Glifo precisa ocupar altura típica de dígito dentro da célula.
-  if (glyphH < h * 0.3 || glyphW < 2) return null;
-  if (glyphH > h * 1.02) return null;
+  if (glyphH < h * 0.3 || glyphW < 2) return { kind: 'empty' };
+  if (glyphH > h * 1.02) return { kind: 'unreadable', confidence: 0 };
 
   const vector = normalizeGlyph(cleaned, w, { x0: bx0, y0: by0, x1: bx1, y1: by1 });
   const glyphHoles = countHoles(cleaned, w, h);
@@ -1138,7 +1158,20 @@ export function classifyCell(
     }
   }
 
-  if (bestDigit === 0) return null;
+  if (bestDigit === 0) return { kind: 'unreadable', confidence: 0 };
+
+  let inkInBox = 0;
+  for (let y = by0; y <= by1; y += 1) {
+    for (let x = bx0; x <= bx1; x += 1) inkInBox += cleaned[y * w + x];
+  }
+  const fill = inkInBox / (glyphW * glyphH);
+  const widthRatio = glyphW / w;
+
+  // Sujeira que não é dígito: casamento ruim com qualquer template, glifo
+  // fino demais (resto de linha) ou maciço demais (barra sólida).
+  if (bestScore > MAX_MATCH_SCORE || widthRatio < MIN_GLYPH_WIDTH || fill > MAX_GLYPH_FILL) {
+    return { kind: 'unreadable', confidence: 0 };
+  }
 
   // Confiança combina qualidade absoluta e margem sobre o segundo lugar.
   const quality = Math.max(0, Math.min(1, 1 - bestScore / 0.42));
@@ -1148,7 +1181,7 @@ export function classifyCell(
       : Math.max(0, Math.min(1, (secondScore - bestScore) / Math.max(secondScore, 1e-6)));
   const confidence = Math.round((quality * 0.6 + margin * 0.4) * 100) / 100;
 
-  return { digit: bestDigit, confidence };
+  return { kind: 'digit', digit: bestDigit, confidence };
 }
 
 function emptyResult(): ScanResult {
@@ -1257,7 +1290,12 @@ export function recognizeSudoku(
 
       const region = sampleQuad(work.gray, gw, gh, topLeft, topRight, bottomLeft, bottomRight, 0.17);
       const cell = classifyCell(region, SAMPLE, templates, minInk);
-      if (!cell) continue;
+      if (cell.kind === 'empty') continue;
+      if (cell.kind === 'unreadable') {
+        // Fica vazio (nada de número inventado), mas destacado para conferência.
+        uncertain[row][col] = true;
+        continue;
+      }
 
       grid[row][col] = cell.digit;
       confidence[row][col] = cell.confidence;

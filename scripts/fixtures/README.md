@@ -36,6 +36,7 @@ com a grade que o leitor **deve** devolver.
 | `mono-tilt-margin` | DejaVu Sans Mono 400 | giro negativo, margem em volta do tabuleiro |
 | `persp-trap` | Lato 400 | perspectiva (16% de afunilamento no topo) |
 | `dense-print` | Lato 700 | células apertadas, dígitos grandes (0,82 da célula) |
+| `smudges` | Lato 700 | manchas de papel em células vazias (não podem virar número) |
 | `no-grid` | Lato 400 | controle negativo: texto sem tabuleiro |
 | `lowres-blur` | Merriweather 400 | fora do envelope: 600 px com desfoque 1,5 px |
 | `tiny-400` | Lato 400 | fora do envelope: 400 px com desfoque 1,7 px |
@@ -44,8 +45,12 @@ As fontes usadas aqui **não** fazem parte dos templates do classificador
 (`src/ocr/templates.ts` usa DejaVu Sans, Roboto, Noto Sans e Open Sans), então a
 leitura é testada contra formas que o app nunca viu.
 
-As duas últimas ficam fora do envelope de qualidade: a expectativa do teste é
-"recusar é aceitável, devolver tabuleiro errado com confiança não é".
+`smudges` usa a expectativa `no-invented`: todo número devolvido precisa existir
+na foto (faltar é aceitável, inventar não).
+
+`lowres-blur` e `tiny-400` ficam fora do envelope de qualidade, com a expectativa
+`no-garbage`: "recusar é aceitável, devolver tabuleiro errado com confiança não
+é".
 
 ## Como verificar
 

@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 
 import { decodePng } from '../src/ocr/png.ts';
-import { recognizeSudoku, prepareTemplates, classifyCell, createEmptyGrid } from '../src/ocr/recognize.ts';
+import { recognizeSudoku, prepareTemplates, classifyCell } from '../src/ocr/recognize.ts';
 import { DIGIT_TEMPLATES } from '../src/ocr/templates.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -184,6 +184,73 @@ for (const [label, dx, dy] of variants) {
 }
 console.log('  ok\n');
 
+/* ------------------------------------- 2b. células que NÃO têm dígito */
+
+console.log('Células sem dígito (não pode virar número)');
+const CELL = 56;
+const blankCell = () => new Uint8Array(CELL * CELL).fill(255);
+
+const withVerticalBar = (x0, width, value = 40) => {
+  const cell = blankCell();
+  for (let y = 0; y < CELL; y += 1) {
+    for (let x = x0; x < x0 + width; x += 1) if (x >= 0 && x < CELL) cell[y * CELL + x] = value;
+  }
+  return cell;
+};
+
+const withDiagonal = (from, to, value = 60) => {
+  const cell = blankCell();
+  for (let y = 0; y < CELL; y += 1) {
+    const x = Math.round(from + ((to - from) * y) / CELL);
+    for (let d = 0; d < 2; d += 1) if (x + d >= 0 && x + d < CELL) cell[y * CELL + x + d] = value;
+  }
+  return cell;
+};
+
+const withNoise = (amplitude, seed = 7) => {
+  const cell = blankCell();
+  let state = seed;
+  const rnd = () => {
+    state |= 0;
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  for (let i = 0; i < cell.length; i += 1) {
+    cell[i] = Math.max(0, Math.min(255, Math.round(250 + (rnd() + rnd() - 1) * amplitude)));
+  }
+  return cell;
+};
+
+const withBlob = (cx, cy, size, value = 50) => {
+  const cell = blankCell();
+  for (let y = cy; y < cy + size; y += 1) {
+    for (let x = cx; x < cx + size; x += 1) {
+      if (x >= 0 && x < CELL && y >= 0 && y < CELL) cell[y * CELL + x] = value;
+    }
+  }
+  return cell;
+};
+
+const nonDigits = [
+  ['célula em branco', blankCell()],
+  ['resto de linha vertical (borda)', withVerticalBar(0, 3)],
+  ['resto de linha vertical (meio)', withVerticalBar(26, 3)],
+  ['resto de linha na diagonal', withDiagonal(0, 12)],
+  ['ruído forte de sensor', withNoise(70)],
+  ['mancha de sujeira 8x8', withBlob(24, 24, 8)],
+  ['traço curto', withBlob(26, 22, 3)],
+];
+
+for (const [label, cell] of nonDigits) {
+  const reading = classifyCell(cell, CELL, templates);
+  check(`${label}: não pode virar dígito`, reading.kind !== 'digit',
+    reading.kind === 'digit' ? `leu ${reading.digit}` : '');
+  console.log(`  ${label.padEnd(34)} ${reading.kind}`);
+}
+console.log('  ok\n');
+
 /* ------------------------------------------------------- 3. fixtures reais */
 
 console.log('Fixtures');
@@ -235,6 +302,21 @@ for (const item of manifest) {
       check(`${item.name}: leitura limpa não marca células como duvidosas`, flagged <= 2,
         `${flagged} células incertas`);
     }
+  } else if (item.expect === 'no-invented') {
+    // Sujeira nas células vazias não pode virar número: o que o app devolve
+    // precisa existir na foto. Faltar número é aceitável; inventar não.
+    const invented = [];
+    for (let row = 0; row < 9; row += 1) {
+      for (let col = 0; col < 9; col += 1) {
+        if (result.grid[row][col] !== 0 && result.grid[row][col] !== item.expected[row][col]) {
+          invented.push(`r${row + 1}c${col + 1}=${result.grid[row][col]}(esperado ${item.expected[row][col]})`);
+        }
+      }
+    }
+    const read = result.grid.flat().filter((value) => value !== 0).length;
+    console.log(`  → ${read}/${givens} números lidos, ${invented.length} inventados`);
+    check(`${item.name}: nenhum número inventado em célula vazia`, invented.length === 0, invented.slice(0, 6).join(' '));
+    check(`${item.name}: leu a maioria dos números da foto`, read >= givens * 0.8, `${read}/${givens}`);
   } else {
     // Caso fora do envelope de qualidade: recusar é aceitável, inventar não.
     if (result.gridDetected) {
@@ -254,4 +336,3 @@ if (failures > 0) {
   process.exit(1);
 }
 console.log('Leitor de fotos: todas as verificações passaram.');
-void createEmptyGrid;

@@ -62,10 +62,29 @@ export function ScanScreen({ onCancel, onReady }: ScanScreenProps) {
     () => conflicts.reduce((total, row) => total + row.filter(Boolean).length, 0),
     [conflicts],
   );
-  const markedCount = useMemo(
-    () => (result ? result.uncertain.flat().filter(Boolean).length : 0),
-    [result],
-  );
+  /** Células destacadas que têm número (leitura duvidosa) ... */
+  const doubtfulDigits = useMemo(() => {
+    if (!result) return 0;
+    let total = 0;
+    for (let row = 0; row < SIZE; row += 1) {
+      for (let col = 0; col < SIZE; col += 1) {
+        if (result.uncertain[row][col] && grid[row][col] !== EMPTY) total += 1;
+      }
+    }
+    return total;
+  }, [grid, result]);
+
+  /** ... e células que tinham tinta mas ficaram vazias (não deu para ler). */
+  const doubtfulEmpty = useMemo(() => {
+    if (!result) return 0;
+    let total = 0;
+    for (let row = 0; row < SIZE; row += 1) {
+      for (let col = 0; col < SIZE; col += 1) {
+        if (result.uncertain[row][col] && grid[row][col] === EMPTY) total += 1;
+      }
+    }
+    return total;
+  }, [grid, result]);
   const filledCount = useMemo(
     () => grid.reduce((total, row) => total + row.filter((value) => value !== EMPTY).length, 0),
     [grid],
@@ -256,14 +275,28 @@ export function ScanScreen({ onCancel, onReady }: ScanScreenProps) {
             <Text style={styles.summaryBody}>
               {filledCount} números · confiança média {Math.round((result?.meanConfidence ?? 0) * 100)}%
             </Text>
-            {markedCount > 0 ? (
+            {doubtfulDigits > 0 ? (
               <Text style={styles.summaryWarning}>
-                {markedCount} célula{markedCount > 1 ? 's' : ''} em amarelo
-                {markedCount > 1 ? ' precisam' : ' precisa'} de conferência.
+                {doubtfulDigits} número{doubtfulDigits > 1 ? 's' : ''} em amarelo com leitura duvidosa —
+                confira contra a foto.
               </Text>
-            ) : (
+            ) : null}
+            {doubtfulEmpty > 0 ? (
+              <Text style={styles.summaryWarning}>
+                {doubtfulEmpty} célula{doubtfulEmpty > 1 ? 's' : ''} em amarelo deixada
+                {doubtfulEmpty > 1 ? 's' : ''} vazia{doubtfulEmpty > 1 ? 's' : ''}: tinha marca, mas não é
+                um número legível (risco, resto de linha ou escrita à mão). Se for um número, toque e digite.
+              </Text>
+            ) : null}
+            {doubtfulDigits === 0 && doubtfulEmpty === 0 ? (
               <Text style={styles.summaryOk}>Nenhuma célula duvidosa — confira na foto e comece.</Text>
-            )}
+            ) : null}
+            {filledCount > 55 ? (
+              <Text style={styles.summaryError}>
+                {filledCount} números é muito para um Sudoku jogável (o normal é 22–45): pode haver número
+                a mais. Confira as células vazias da foto antes de jogar.
+              </Text>
+            ) : null}
             {conflictCount > 0 ? (
               <Text style={styles.summaryError}>
                 {conflictCount} conflito{conflictCount > 1 ? 's' : ''} (número repetido em vermelho).
