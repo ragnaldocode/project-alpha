@@ -23,7 +23,7 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Verificar gerador de Sudoku
+      - name: Verificar lógica (gerador + leitor de fotos)
         run: npm run verify
 
       - name: Build web (smoke test do bundle)
