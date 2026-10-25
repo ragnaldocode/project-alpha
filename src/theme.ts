@@ -13,6 +13,7 @@ export const colors = {
   accentSoft: '#1E3358',
   success: '#34D399',
   warning: '#FBBF24',
+  warningSoft: '#3A2F14',
   highlightPeers: '#16233A',
   highlightSame: '#1F3355',
   selected: '#25497F',

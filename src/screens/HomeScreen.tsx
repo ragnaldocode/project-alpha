@@ -5,6 +5,7 @@ import { colors, radius, spacing } from '../theme';
 
 interface HomeScreenProps {
   onStart: (level: number) => void;
+  onScan: () => void;
 }
 
 const TIER_COLORS: Record<string, string> = {
@@ -14,7 +15,7 @@ const TIER_COLORS: Record<string, string> = {
   especialista: '#F87171',
 };
 
-export function HomeScreen({ onStart }: HomeScreenProps) {
+export function HomeScreen({ onStart, onScan }: HomeScreenProps) {
   const levels = Array.from({ length: LEVEL_COUNT }, (_, index) => levelDef(index + 1));
 
   return (
@@ -25,6 +26,22 @@ export function HomeScreen({ onStart }: HomeScreenProps) {
         {LEVEL_COUNT} níveis gerados aleatoriamente. Quanto maior o nível, menos números revelados —
         e cada tabuleiro tem solução única.
       </Text>
+
+      <Pressable
+        onPress={onScan}
+        style={({ pressed }) => [styles.scanCard, pressed && styles.scanCardPressed]}
+        accessibilityRole="button"
+        accessibilityLabel="Ler tabuleiro de uma foto ou da galeria"
+      >
+        <Text style={styles.scanIcon}>▣</Text>
+        <View style={styles.cardBody}>
+          <Text style={styles.scanTitle}>Ler foto do Sudoku</Text>
+          <Text style={styles.scanMeta}>
+            Tire uma foto do tabuleiro impresso e jogue a partir dele
+          </Text>
+        </View>
+        <Text style={styles.chevron}>›</Text>
+      </Pressable>
 
       <View style={styles.list}>
         {levels.map((def) => (
@@ -80,8 +97,37 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   list: {
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     gap: spacing.sm,
+  },
+  scanCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  scanCardPressed: {
+    opacity: 0.85,
+  },
+  scanIcon: {
+    color: colors.accent,
+    fontSize: 22,
+  },
+  scanTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  scanMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
   },
   card: {
     flexDirection: 'row',

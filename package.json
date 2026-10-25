@@ -1,11 +1,14 @@
 {
   "name": "project-alpha",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~58.0.15",
     "expo": "~58.0.19",
+    "expo-image-manipulator": "~58.0.15",
+    "expo-image-picker": "~58.0.10",
     "expo-status-bar": "~58.0.4",
+    "fflate": "^0.8.3",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.0",
@@ -21,8 +24,10 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "verify": "node scripts/verify-generator.mjs",
-    "check": "npm run typecheck && npm run verify"
+    "verify": "npm run verify:generator && npm run verify:ocr",
+    "check": "npm run typecheck && npm run verify",
+    "verify:generator": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-generator.mjs",
+    "verify:ocr": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-ocr.mjs"
   },
   "private": true
 }

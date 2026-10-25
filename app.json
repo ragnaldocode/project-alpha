@@ -3,7 +3,7 @@
     "name": "Project Alpha",
     "slug": "project-alpha",
     "scheme": "projectalpha",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -25,6 +25,16 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O app acessa suas fotos para importar o tabuleiro de Sudoku.",
+          "cameraPermission": "A câmera é usada para fotografar o tabuleiro de Sudoku.",
+          "microphonePermission": false
+        }
+      ]
+    ]
   }
 }

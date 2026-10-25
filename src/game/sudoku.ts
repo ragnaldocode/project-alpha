@@ -27,6 +27,9 @@ export interface LevelDef {
   targetGivens: number;
 }
 
+/** De onde veio o tabuleiro em jogo. */
+export type PuzzleSource = 'generated' | 'scan';
+
 export interface Puzzle {
   puzzle: Grid;
   solution: Grid;
@@ -37,6 +40,8 @@ export interface Puzzle {
   attempts: number;
   level: number;
   difficulty: Difficulty;
+  /** 'scan' = lido de uma foto; nesse caso `level`/`difficulty` não se aplicam. */
+  source: PuzzleSource;
 }
 
 export const TIERS: Record<Difficulty, Tier> = {
@@ -157,12 +162,14 @@ export function generateSolution(rng: () => number): Grid {
 }
 
 /**
- * Conta soluções até `limit` (padrão 2). Para o gerador só importa saber se é
- * exatamente 1 — parar em 2 mantém a checagem barata.
+ * Busca soluções até `limit` e devolve também a primeira encontrada — assim a
+ * contagem (gerador) e a resolução (tabuleiro lido de foto) usam a mesma
+ * implementação.
  */
-export function countSolutions(input: Grid, limit = 2): number {
+export function solveGrid(input: Grid, limit = 2): { count: number; solution: Grid | null } {
   const grid = cloneGrid(input);
   let found = 0;
+  let solution: Grid | null = null;
 
   const search = (): void => {
     if (found >= limit) return;
@@ -198,6 +205,7 @@ export function countSolutions(input: Grid, limit = 2): number {
 
     if (bestRow === -1) {
       found += 1;
+      if (!solution) solution = cloneGrid(grid);
       return;
     }
 
@@ -211,7 +219,15 @@ export function countSolutions(input: Grid, limit = 2): number {
   };
 
   search();
-  return found;
+  return { count: found, solution };
+}
+
+/**
+ * Conta soluções até `limit` (padrão 2). Para o gerador só importa saber se é
+ * exatamente 1 — parar em 2 mantém a checagem barata.
+ */
+export function countSolutions(input: Grid, limit = 2): number {
+  return solveGrid(input, limit).count;
 }
 
 /** Remove números da solução até o alvo, preservando unicidade da solução. */
@@ -270,6 +286,7 @@ export function generatePuzzle(
       attempts: attempt,
       level: def.level,
       difficulty: def.tier.id,
+      source: 'generated',
     };
 
     if (!best || candidate.givens < best.givens) best = candidate;
@@ -324,4 +341,51 @@ export function findConflicts(board: Grid): boolean[][] {
   }
 
   return conflicts;
+}
+
+export type ImportedPuzzleResult =
+  | { ok: true; puzzle: Puzzle; multipleSolutions: boolean }
+  | { ok: false; reason: 'conflict' | 'unsolvable'; conflicts: boolean[][] };
+
+/**
+ * Monta um tabuleiro jogável a partir de uma grade lida de foto.
+ *
+ * - números repetidos em linha/coluna/caixa ⇒ recusa (o cliente corrige à mão);
+ * - sem solução ⇒ recusa;
+ * - mais de uma solução ⇒ aceita, mas avisa: normalmente significa que um
+ *   número revelado ficou de fora na leitura, e o app usa a primeira solução
+ *   encontrada para dicas e para detectar erros.
+ */
+export function puzzleFromGrid(grid: Grid): ImportedPuzzleResult {
+  const conflicts = findConflicts(grid);
+  if (conflicts.some((row) => row.some(Boolean))) {
+    return { ok: false, reason: 'conflict', conflicts };
+  }
+
+  const { count, solution } = solveGrid(grid, 2);
+  if (count === 0 || !solution) {
+    return { ok: false, reason: 'unsolvable', conflicts };
+  }
+
+  let givens = 0;
+  for (let row = 0; row < SIZE; row += 1) {
+    for (let col = 0; col < SIZE; col += 1) {
+      if (grid[row][col] !== EMPTY) givens += 1;
+    }
+  }
+
+  return {
+    ok: true,
+    multipleSolutions: count > 1,
+    puzzle: {
+      puzzle: cloneGrid(grid),
+      solution,
+      givens,
+      seed: 0,
+      attempts: 0,
+      level: 0,
+      difficulty: 'facil',
+      source: 'scan',
+    },
+  };
 }

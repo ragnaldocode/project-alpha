@@ -9,7 +9,7 @@ import {
 
 import { Board } from '../components/Board';
 import { NumberPad } from '../components/NumberPad';
-import { LEVEL_COUNT, levelDef } from '../game/sudoku';
+import { LEVEL_COUNT, levelDef, type Puzzle } from '../game/sudoku';
 import { useSudoku } from '../state/useSudoku';
 import { colors, radius, spacing } from '../theme';
 
@@ -17,6 +17,10 @@ interface GameScreenProps {
   level: number;
   onExit: () => void;
   onStart: (level: number) => void;
+  /** Tabuleiro lido de foto (dispensa nível; a partida roda igual). */
+  imported?: Puzzle;
+  /** Voltar para o leitor de fotos (só faz sentido no modo importado). */
+  onScan?: () => void;
 }
 
 function formatTime(totalSeconds: number): string {
@@ -25,10 +29,10 @@ function formatTime(totalSeconds: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function GameScreen({ level, onExit, onStart }: GameScreenProps) {
+export function GameScreen({ level, onExit, onStart, imported, onScan }: GameScreenProps) {
   const { width } = useWindowDimensions();
   const def = levelDef(level);
-  const game = useSudoku(level);
+  const game = useSudoku(level, imported);
 
   const cellSize = useMemo(() => {
     const usable = Math.min(width - spacing.md * 2, 440);
@@ -51,9 +55,11 @@ export function GameScreen({ level, onExit, onStart }: GameScreenProps) {
         </View>
       </View>
 
-      <Text style={styles.level}>Nível {def.level}</Text>
+      <Text style={styles.level}>{imported ? 'Foto importada' : `Nível ${def.level}`}</Text>
       <Text style={styles.meta}>
-        {def.tier.label} · {game.puzzle.givens} revelados · {def.tier.hint}
+        {imported
+          ? `lido da sua foto · ${game.puzzle.givens} revelados`
+          : `${def.tier.label} · ${game.puzzle.givens} revelados · ${def.tier.hint}`}
       </Text>
 
       <View style={styles.boardWrapper}>
@@ -93,14 +99,25 @@ export function GameScreen({ level, onExit, onStart }: GameScreenProps) {
         >
           <Text style={styles.actionText}>Reiniciar</Text>
         </Pressable>
-        <Pressable
-          onPress={game.newRound}
-          style={[styles.action, styles.actionPrimary]}
-          accessibilityRole="button"
-          accessibilityLabel="Gerar novo tabuleiro do mesmo nível"
-        >
-          <Text style={styles.actionTextPrimary}>Novo tabuleiro</Text>
-        </Pressable>
+        {imported ? (
+          <Pressable
+            onPress={onScan}
+            style={[styles.action, styles.actionPrimary]}
+            accessibilityRole="button"
+            accessibilityLabel="Ler outro tabuleiro de uma foto"
+          >
+            <Text style={styles.actionTextPrimary}>Escanear outro</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={game.newRound}
+            style={[styles.action, styles.actionPrimary]}
+            accessibilityRole="button"
+            accessibilityLabel="Gerar novo tabuleiro do mesmo nível"
+          >
+            <Text style={styles.actionTextPrimary}>Novo tabuleiro</Text>
+          </Pressable>
+        )}
       </View>
 
       {won ? (
@@ -108,29 +125,29 @@ export function GameScreen({ level, onExit, onStart }: GameScreenProps) {
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>Resolvido</Text>
             <Text style={styles.modalBody}>
-              Nível {def.level} em {formatTime(game.seconds)}
+              {imported ? 'Tabuleiro da foto' : `Nível ${def.level}`} em {formatTime(game.seconds)}
               {game.mistakes > 0 ? ` · ${game.mistakes} erro(s)` : ' · sem erros'}
             </Text>
             <Pressable
               style={[styles.modalButton, styles.modalPrimary]}
-              onPress={() => onStart(nextLevel)}
+              onPress={() => (imported ? game.restart() : onStart(nextLevel))}
               accessibilityRole="button"
               accessibilityLabel={
-                nextLevel === level ? 'Jogar novamente' : `Ir para o nível ${nextLevel}`
+                imported || nextLevel === level ? 'Jogar novamente' : `Ir para o nível ${nextLevel}`
               }
             >
               <Text style={styles.modalButtonText}>
-                {nextLevel === level ? 'Jogar de novo' : `Ir para o nível ${nextLevel}`}
+                {imported || nextLevel === level ? 'Jogar de novo' : `Ir para o nível ${nextLevel}`}
               </Text>
             </Pressable>
             <Pressable
               style={styles.modalButton}
-              onPress={onExit}
+              onPress={imported ? onScan : onExit}
               accessibilityRole="button"
-              accessibilityLabel="Escolher outro nível"
+              accessibilityLabel={imported ? 'Ler outro tabuleiro de uma foto' : 'Escolher outro nível'}
             >
               <Text style={[styles.modalButtonText, styles.modalButtonTextMuted]}>
-                Escolher outro nível
+                {imported ? 'Escanear outro' : 'Escolher outro nível'}
               </Text>
             </Pressable>
           </View>

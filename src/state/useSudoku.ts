@@ -51,8 +51,12 @@ function countRemaining(board: Grid): Record<number, number> {
   return remaining;
 }
 
-export function useSudoku(level: number): UseSudokuResult {
-  const [puzzle, setPuzzle] = useState<Puzzle>(() => generatePuzzle(level));
+/**
+ * Estado de uma partida. `initial` permite jogar um tabuleiro que não veio do
+ * gerador — é o caso do Sudoku lido de foto.
+ */
+export function useSudoku(level: number, initial?: Puzzle): UseSudokuResult {
+  const [puzzle, setPuzzle] = useState<Puzzle>(() => initial ?? generatePuzzle(level));
   const [board, setBoard] = useState<Grid>(() => cloneGrid(puzzle.puzzle));
   const [selected, setSelected] = useState<SelectedCell | null>(null);
   const [status, setStatus] = useState<GameStatus>('playing');

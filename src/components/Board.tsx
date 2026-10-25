@@ -13,6 +13,8 @@ interface BoardProps {
   isWrong: (row: number, col: number) => boolean;
   onSelect: (row: number, col: number) => void;
   cellSize: number;
+  /** Células marcadas para o cliente conferir (leitura incerta da foto). */
+  mark?: boolean[][];
 }
 
 export function Board({
@@ -23,6 +25,7 @@ export function Board({
   isWrong,
   onSelect,
   cellSize,
+  mark,
 }: BoardProps) {
   const selectedValue = selected ? board[selected.row][selected.col] : 0;
 
@@ -50,15 +53,19 @@ export function Board({
             const peer = isPeer(rowIndex, colIndex);
             const sameValue = selectedValue !== 0 && value === selectedValue;
 
+            const flagged = mark?.[rowIndex]?.[colIndex] ?? false;
+
             const background = isSelected
               ? colors.selected
               : conflict
                 ? '#3A1B26'
-                : sameValue
-                  ? colors.highlightSame
-                  : peer
-                    ? colors.highlightPeers
-                    : 'transparent';
+                : flagged
+                  ? colors.warningSoft
+                  : sameValue
+                    ? colors.highlightSame
+                    : peer
+                      ? colors.highlightPeers
+                      : 'transparent';
 
             return (
               <Pressable
@@ -79,7 +86,7 @@ export function Board({
                 accessibilityRole="button"
                 accessibilityLabel={`Linha ${rowIndex + 1}, coluna ${colIndex + 1}${
                   value ? `, valor ${value}` : ', vazio'
-                }`}
+                }${flagged ? ', conferir' : ''}`}
               >
                 <Text
                   style={{
